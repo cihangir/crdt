@@ -10,11 +10,14 @@ import (
 // increment and merge are possible. Divergent histories are resolved by taking
 // the maximum count for the counter.  The value of the counter is the sum of
 // all counts.
+//
+// TODO implement merge!!
 type GCounter struct {
 	ccrdt *CCRDT
 	key   string
 }
 
+// NewGCounter creates a new GCounter
 func (c *CCRDT) NewGCounter(key string) *GCounter {
 	return &GCounter{
 		ccrdt: c,
@@ -22,11 +25,13 @@ func (c *CCRDT) NewGCounter(key string) *GCounter {
 	}
 }
 
+// Add adds item to the GCounter with a given delta
 func (g *GCounter) Add(delta int64) error {
 	_, err := g.ccrdt.sessions.One().Incrby(g.key, delta)
 	return err
 }
 
+// Sum returns the sum of all the actors
 func (g *GCounter) Sum() (int64, error) {
 	var res int64
 	for _, c := range g.ccrdt.sessions.All() {
