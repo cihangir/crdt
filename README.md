@@ -1,4 +1,5 @@
-# CCRDT [![GoDoc](https://godoc.org/github.com/cihangir/ccrdt?status.png)](https://godoc.org/github.com/cihangir/ccrdt) [![Build Status](https://travis-ci.org/cihangir/ccrdt.png)](https://travis-ci.org/cihangir/ccrdt)
+# CCRDT [![GoDoc](https://godoc.org/github.com/cihangir/ccrdt?status.svg)](https://godoc.org/github.com/cihangir/ccrdt) [![Build Status](https://travis-ci.org/cihangir/ccrdt.svg)](https://travis-ci.org/cihangir/ccrdt)
+
 =====
 
 Convergent and Commutative Replicated Data Types
