@@ -9,6 +9,7 @@ import (
 	"github.com/koding/redis"
 )
 
+// CCRDTPrefix is the redis connection prefix for all connections
 var CCRDTPrefix = "ccrdt"
 
 type sessions struct {
@@ -50,6 +51,7 @@ func (s *sessions) All() []*redis.RedisSession {
 	return s.sessions
 }
 
+// New creates a new CCRDT system and its backend connections
 func New(servers []string) (*CCRDT, error) {
 	c := &CCRDT{
 		sessions: &sessions{
