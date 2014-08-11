@@ -6,6 +6,10 @@ import (
 	"github.com/koding/redis"
 )
 
+// GCounter is a grow-only counter (inspired by vector clocks) in which only
+// increment and merge are possible. Divergent histories are resolved by taking
+// the maximum count for the counter.  The value of the counter is the sum of
+// all counts.
 type GCounter struct {
 	ccrdt *CCRDT
 	key   string
