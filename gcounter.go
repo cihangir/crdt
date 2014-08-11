@@ -27,7 +27,7 @@ func (c *CCRDT) NewGCounter(key string) *GCounter {
 
 // Add adds item to the GCounter with a given delta
 func (g *GCounter) Add(delta int64) error {
-	_, err := g.ccrdt.sessions.One().Incrby(g.key, delta)
+	_, err := g.ccrdt.sessions.One().IncrBy(g.key, delta)
 	return err
 }
 
