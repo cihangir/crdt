@@ -1,4 +1,4 @@
-# CCRDT [![GoDoc](https://godoc.org/github.com/cihangir/ccrdt?status.svg)](https://godoc.org/github.com/cihangir/ccrdt) [![Build Status](https://travis-ci.org/cihangir/ccrdt.svg)](https://travis-ci.org/cihangir/ccrdt)
+# CRDT [![GoDoc](https://godoc.org/github.com/cihangir/crdt?status.svg)](https://godoc.org/github.com/cihangir/crdt) [![Build Status](https://travis-ci.org/cihangir/crdt.svg)](https://travis-ci.org/cihangir/crdt)
 
 WIP!
 
@@ -27,3 +27,5 @@ Things that can be done
 
 * Instead of giving multiple backedn services into CCRDT New function, we can pass only one
 act according to the original paper
+
+
