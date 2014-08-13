@@ -27,29 +27,70 @@ func (c *CCRDT) NewGCounter(key string) *GCounter {
 
 // Add adds item to the GCounter with a given delta
 func (g *GCounter) Add(delta int64) error {
-	_, err := g.ccrdt.sessions.One().IncrBy(g.key, delta)
-	return err
+
+	errCount := 0
+	var lastErr error
+
+	// add goroutine support
+	for _, c := range g.ccrdt.sessions.All() {
+
+		// TODO we can do read-repair here
+		// redis returns lastest value
+		_, err := c.IncrBy(g.key, delta)
+		if err != nil {
+			lastErr = err
+			errCount++
+		}
+	}
+
+	// at least we have one success
+	if errCount != g.ccrdt.sessions.Count() {
+		return nil
+	}
+
+	return lastErr
 }
 
-// Sum returns the sum of all the actors
-func (g *GCounter) Sum() (int64, error) {
+// Merge returns the sum of all the actors
+func (g *GCounter) Merge() (int64, error) {
 	var res int64
-	for _, c := range g.ccrdt.sessions.All() {
+	var repairNeeded bool
+	for i, c := range g.ccrdt.sessions.All() {
 		val, err := c.Get(g.key)
 		if err != nil && err != redis.ErrNil {
-			return 0, err
+			// ignore the errors
+			// return 0, err
 		}
 
 		if val == "" {
 			val = "0"
 		}
-		i, err := strconv.ParseInt(val, 10, 64)
+
+		d, err := strconv.ParseInt(val, 10, 64)
 		if err != nil {
-			return 0, err
+			// ignore the errors
+			// return 0, err
 		}
 
-		res += i
+		// if the `res`is smaller than the current value, previous ones should
+		// be repaired
+		if res < d {
+			// if this is the first operation, ignore the case
+			if i != 0 {
+				repairNeeded = true
+			}
+
+			res = d
+		}
+	}
+
+	if repairNeeded {
+		go g.repair()
 	}
 
 	return res, nil
+}
+
+func (g *GCounter) repair() {
+	// do repairing
 }
