@@ -1,4 +1,4 @@
-package ccrdt
+package crdt
 
 import (
 	"strconv"
