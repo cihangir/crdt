@@ -51,6 +51,13 @@ func (s *sessions) All() []*redis.RedisSession {
 	return s.sessions
 }
 
+// Count returns backend service count
+func (s *sessions) Count() int {
+	// s.mu.Lock()
+	// defer s.mu.Unlock()
+	return len(s.sessions)
+}
+
 // New creates a new CCRDT system and its backend connections
 func New(servers []string) (*CCRDT, error) {
 	c := &CCRDT{
