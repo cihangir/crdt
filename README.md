@@ -17,4 +17,5 @@ counts.
 
 
 Implementation Differences form the original paper:
-* Instead of incrementing one-by-one, in this package you can give increment count
+* Increment() Instead of incrementing one-by-one, in this package you can give increment count
+* Query() <- this wonnt be implemented(at least for now), merge is doing the same thing
