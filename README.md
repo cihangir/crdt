@@ -17,6 +17,13 @@ counts.
 
 
 Implementation Differences form the original paper:
+
 * Increment() Instead of incrementing one-by-one, in this package you can give increment count
 * Query() <- this wonnt be implemented(at least for now), merge is doing the same thing
 * Compare(a,b) <- this wonnt be implemented(at least for now), merge is doing the same thing
+* Merge, merge is not merging two actors, it is fetching all the values from all the actors and compares them, if any of them is different fixes while reading
+
+Things that can be done
+
+* Instead of giving multiple backedn services into CCRDT New function, we can pass only one
+act according to the original paper
