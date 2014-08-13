@@ -55,6 +55,8 @@ func (g *GCounter) Add(delta int64) error {
 func (g *GCounter) Merge() (int64, error) {
 	var res int64
 	var repairNeeded bool
+	values := make(map[*redis.RedisSession]int64)
+
 	for i, c := range g.ccrdt.sessions.All() {
 		val, err := c.Get(g.key)
 		if err != nil && err != redis.ErrNil {
@@ -72,6 +74,9 @@ func (g *GCounter) Merge() (int64, error) {
 			// return 0, err
 		}
 
+		// add data to a temp cache
+		values[c] = d
+
 		// if the `res`is smaller than the current value, previous ones should
 		// be repaired
 		if res < d {
@@ -85,12 +90,13 @@ func (g *GCounter) Merge() (int64, error) {
 	}
 
 	if repairNeeded {
-		go g.repair()
+		for ses, per := range values {
+			if res == per {
+				continue
+			}
+			ses.IncrBy(g.key, res-per)
+		}
 	}
 
 	return res, nil
-}
-
-func (g *GCounter) repair() {
-	// do repairing
 }
