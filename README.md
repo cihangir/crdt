@@ -19,3 +19,4 @@ counts.
 Implementation Differences form the original paper:
 * Increment() Instead of incrementing one-by-one, in this package you can give increment count
 * Query() <- this wonnt be implemented(at least for now), merge is doing the same thing
+* Compare(a,b) <- this wonnt be implemented(at least for now), merge is doing the same thing
