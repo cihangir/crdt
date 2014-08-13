@@ -13,12 +13,12 @@ import (
 //
 // TODO implement merge!!
 type GCounter struct {
-	ccrdt *CCRDT
+	ccrdt *CRDT
 	key   string
 }
 
 // NewGCounter creates a new GCounter
-func (c *CCRDT) NewGCounter(key string) *GCounter {
+func (c *CRDT) NewGCounter(key string) *GCounter {
 	return &GCounter{
 		ccrdt: c,
 		key:   key,

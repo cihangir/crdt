@@ -2,7 +2,7 @@ package ccrdt
 
 import "testing"
 
-func initCCRDT(t *testing.T) *CCRDT {
+func initCCRDT(t *testing.T) *CRDT {
 
 	ccrdt, err := New(
 		[]string{

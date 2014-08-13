@@ -1,5 +1,5 @@
-// Package ccrdt provides Convergent and Commutative Replicated Data Types
-package ccrdt
+// Package crdt provides Convergent and Commutative Replicated Data Types
+package crdt
 
 import (
 	"math/rand"
@@ -9,8 +9,8 @@ import (
 	"github.com/koding/redis"
 )
 
-// CCRDTPrefix is the redis connection prefix for all connections
-var CCRDTPrefix = "ccrdt"
+// CRDTPrefix is the redis connection prefix for all connections
+var CRDTPrefix = "crdt"
 
 type sessions struct {
 	sessions []*redis.RedisSession
@@ -25,7 +25,7 @@ func (s *sessions) Connect(server string) error {
 	if err != nil {
 		return err
 	}
-	redis.SetPrefix(CCRDTPrefix)
+	redis.SetPrefix(CRDTPrefix)
 	s.Add(redis)
 
 	return nil
@@ -58,9 +58,9 @@ func (s *sessions) Count() int {
 	return len(s.sessions)
 }
 
-// New creates a new CCRDT system and its backend connections
-func New(servers []string) (*CCRDT, error) {
-	c := &CCRDT{
+// New creates a new CRDT system and its backend connections
+func New(servers []string) (*CRDT, error) {
+	c := &CRDT{
 		sessions: &sessions{
 			randomSource: rand.New(
 				rand.NewSource(time.Now().UnixNano()),
@@ -100,7 +100,7 @@ func New(servers []string) (*CCRDT, error) {
 }
 
 // CCRDT holds the required data for CCRDT systems
-type CCRDT struct {
+type CRDT struct {
 	// main redis connections
 	sessions *sessions
 
