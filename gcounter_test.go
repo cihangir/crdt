@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+// https://github.com/kevinwallace/crdt/blob/master/crdt.go
+// https://github.com/aphyr/meangirls/blob/master/README.markdown
 func initGCounter(t *testing.T) *GCounter {
 
 	ccrdt := initCCRDT(t)
@@ -34,7 +36,7 @@ func TestGCounterIncrement(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	count, err := gCounter.Sum()
+	count, err := gCounter.Merge()
 	if err != nil {
 		t.Fatal(err)
 	}
