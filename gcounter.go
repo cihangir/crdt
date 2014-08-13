@@ -10,8 +10,6 @@ import (
 // increment and merge are possible. Divergent histories are resolved by taking
 // the maximum count for the counter.  The value of the counter is the sum of
 // all counts.
-//
-// TODO implement merge!!
 type GCounter struct {
 	ccrdt *CRDT
 	key   string
