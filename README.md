@@ -14,3 +14,7 @@ A G-Counter is a grow-only counter (inspired by vector clocks) in which only
 increment and merge are possible. Divergent histories are resolved by taking the
 maximum count for the counter.  The value of the counter is the sum of all
 counts.
+
+
+Implementation Differences form the original paper:
+* Instead of incrementing one-by-one, in this package you can give increment count
