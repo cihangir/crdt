@@ -99,7 +99,7 @@ func New(servers []string) (*CRDT, error) {
 	return c, nil
 }
 
-// CCRDT holds the required data for CCRDT systems
+// CRDT holds the required data for CCRDT systems
 type CRDT struct {
 	// main redis connections
 	sessions *sessions

@@ -1,3 +1,4 @@
+// Package crdt provides Convergent and Commutative Replicated Data Types
 package crdt
 
 import (
