@@ -4,6 +4,7 @@ WIP!
 
 Convergent and Commutative Replicated Data Types
 
+[original paper](http://hal.inria.fr/docs/00/55/55/88/PDF/techreport.pdf)
 
 Counters
 --------
