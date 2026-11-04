@@ -1,101 +1,115 @@
-// Package crdt provides Convergent and Commutative Replicated Data Types
 package crdt
 
 import (
-	"strconv"
-
-	"github.com/koding/redis"
+	"context"
+	"errors"
+	"fmt"
+	"math/rand/v2"
+	"sync"
 )
 
-// GCounter is a grow-only counter (inspired by vector clocks) in which only
-// increment and merge are possible. Divergent histories are resolved by taking
-// the maximum count for the counter.  The value of the counter is the sum of
-// all counts.
+// GCounter is a grow-only counter using configurable storage backends. It is
+// safe for concurrent use. Each handle writes to one randomly selected actor;
+// Merge synchronizes actors. An unsuccessful Add may have reached its backend,
+// so do not blindly retry it. Use a new key rather than deleting live actor state.
 type GCounter struct {
-	ccrdt *CRDT
-	key   string
+	crdt   *CRDT
+	key    string
+	writer int
 }
 
-// NewGCounter creates a new GCounter
+// NewGCounter opens a named counter without network I/O.
 func (c *CRDT) NewGCounter(key string) *GCounter {
-	return &GCounter{
-		ccrdt: c,
-		key:   key,
-	}
+	return &GCounter{crdt: c, key: c.counterKey("g", key), writer: rand.IntN(len(c.replicas))}
 }
 
-// Add adds item to the GCounter with a given delta
-func (g *GCounter) Add(delta int64) error {
+// Add increments the selected actor by delta. Negative deltas are rejected.
+func (g *GCounter) Add(delta int64) error { return g.AddContext(context.Background(), delta) }
 
-	errCount := 0
-	var lastErr error
-
-	// add goroutine support
-	for _, c := range g.ccrdt.sessions.All() {
-
-		// TODO we can do read-repair here
-		// redis returns lastest value
-		_, err := c.IncrBy(g.key, delta)
-		if err != nil {
-			lastErr = err
-			errCount++
-		}
+// AddContext atomically increments one actor without automatic retries/failover.
+func (g *GCounter) AddContext(ctx context.Context, delta int64) error {
+	if delta < 0 {
+		return ErrNegativeDelta
 	}
-
-	// at least we have one success
-	if errCount != g.ccrdt.sessions.Count() {
-		return nil
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-
-	return lastErr
+	r := g.crdt.replicas[g.writer]
+	return r.backend.Increment(ctx, g.key, delta)
 }
 
-// Merge returns the sum of all the actors
-func (g *GCounter) Merge() (int64, error) {
-	var res int64
-	var repairNeeded bool
-	values := make(map[*redis.RedisSession]int64)
+// Value reads the merged value without repairing replicas. If a replica is
+// unavailable, the returned value is a partial lower bound and err is non-nil.
+func (g *GCounter) Value() (int64, error) { return g.ValueContext(context.Background()) }
 
-	for i, c := range g.ccrdt.sessions.All() {
-		val, err := c.Get(g.key)
-		if err != nil && err != redis.ErrNil {
-			// ignore the errors
-			// return 0, err
-		}
+// ValueContext is Value with cancellation and a deadline.
+func (g *GCounter) ValueContext(ctx context.Context) (int64, error) {
+	state, err := g.Snapshot(ctx)
+	value, valueErr := state.Value()
+	return value, errors.Join(err, valueErr)
+}
 
-		if val == "" {
-			val = "0"
-		}
+// Query is an alias for Value.
+func (g *GCounter) Query() (int64, error) { return g.Value() }
 
-		d, err := strconv.ParseInt(val, 10, 64)
-		if err != nil {
-			// ignore the errors
-			// return 0, err
-		}
-
-		// add data to a temp cache
-		values[c] = d
-
-		// if the `res`is smaller than the current value, previous ones should
-		// be repaired
-		if res < d {
-			// if this is the first operation, ignore the case
-			if i != 0 {
-				repairNeeded = true
+// Snapshot reads a detached state from all replicas. If some reads fail, state
+// contains only components from successful reads and err describes the failures.
+func (g *GCounter) Snapshot(ctx context.Context) (CounterState, error) {
+	states := make([]CounterState, len(g.crdt.replicas))
+	errs := make([]error, len(states))
+	var wg sync.WaitGroup
+	for i, r := range g.crdt.replicas {
+		wg.Go(func() { states[i], errs[i] = r.backend.Snapshot(ctx, g.key) })
+	}
+	wg.Wait()
+	merged := make(CounterState)
+	for i, state := range states {
+		if errs[i] == nil {
+			errs[i] = state.validate()
+			if errs[i] == nil {
+				for actor, value := range state {
+					merged[actor] = max(merged[actor], value)
+				}
 			}
-
-			res = d
+		}
+		if errs[i] != nil {
+			errs[i] = fmt.Errorf("crdt: read replica %d: %w", i, errs[i])
 		}
 	}
+	return merged, errors.Join(errs...)
+}
 
-	if repairNeeded {
-		for ses, per := range values {
-			if res == per {
-				continue
-			}
-			ses.IncrBy(g.key, res-per)
-		}
+// Merge reads and repairs all replicas by component-wise maximum, returning the
+// merged value. Repairs cannot overwrite concurrent increments. A non-nil error
+// indicates an incomplete read, repair, or an unrepresentable total.
+func (g *GCounter) Merge() (int64, error) { return g.MergeContext(context.Background()) }
+
+// MergeContext is Merge with cancellation and a deadline.
+func (g *GCounter) MergeContext(ctx context.Context) (int64, error) {
+	state, readErr := g.Snapshot(ctx)
+	repairErr := g.MergeState(ctx, state)
+	value, valueErr := state.Value()
+	return value, errors.Join(readErr, repairErr, valueErr)
+}
+
+// MergeState joins a detached state into every backend without lowering any
+// component. This is idempotent and may safely be retried after an error.
+func (g *GCounter) MergeState(ctx context.Context, state CounterState) error {
+	if err := state.validate(); err != nil {
+		return err
 	}
-
-	return res, nil
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	errs := make([]error, len(g.crdt.replicas))
+	var wg sync.WaitGroup
+	for i, r := range g.crdt.replicas {
+		wg.Go(func() {
+			if err := r.backend.Merge(ctx, g.key, state); err != nil {
+				errs[i] = fmt.Errorf("crdt: repair replica %d: %w", i, err)
+			}
+		})
+	}
+	wg.Wait()
+	return errors.Join(errs...)
 }

@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.x'
+          cache: true
+      - run: go mod verify
+      - run: go vet ./...
+      - run: go test -race -shuffle=on -cover ./...
+      - name: Check formatting
+        if: runner.os == 'Linux'
+        run: |
+          test -z "$(gofmt -l .)"
+          go run ./internal/cmd/readmefmt
+
+  redis:
+    runs-on: ubuntu-latest
+    services:
+      redis-a:
+        image: redis:8-alpine
+        ports: ['6379:6379']
+        options: --health-cmd 'redis-cli ping' --health-interval 5s --health-timeout 3s --health-retries 5
+      redis-b:
+        image: redis:8-alpine
+        ports: ['6380:6379']
+        options: --health-cmd 'redis-cli ping' --health-interval 5s --health-timeout 3s --health-retries 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.x'
+      - run: go test -race -run TestRedisIntegration -v ./...
+        env:
+          CRDT_REDIS_SERVERS: 127.0.0.1:6379,127.0.0.1:6380
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.x'
+      - run: go test -run '^$' -fuzz '^FuzzCounterMerge$' -fuzztime=15s
+      - run: go test -run '^$' -fuzz '^FuzzSetConvergence$' -fuzztime=15s
+      - run: go test -run '^$' -fuzz '^FuzzRegisterConvergence$' -fuzztime=15s
+
+  vulnerabilities:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.x'
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

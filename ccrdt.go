@@ -1,108 +1,94 @@
-// Package crdt provides Convergent and Commutative Replicated Data Types
 package crdt
 
 import (
-	"math/rand"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"reflect"
 	"sync"
-	"time"
-
-	"github.com/koding/redis"
 )
 
-// CRDTPrefix is the redis connection prefix for all connections
+// CRDTPrefix is the default counter namespace. Set it before constructing clients.
+//
+// Deprecated: use WithPrefix instead. Changing a global while other goroutines
+// construct clients is not safe.
 var CRDTPrefix = "crdt"
 
-type sessions struct {
-	sessions []*redis.RedisSession
+// Option configures a CRDT client independently of its storage backend.
+type Option func(*CRDT)
 
-	randomSource *rand.Rand
-	// lock for sessions
-	mu sync.Mutex
+// WithPrefix sets the counter namespace for a client.
+func WithPrefix(prefix string) Option { return func(c *CRDT) { c.prefix = prefix } }
+
+type replica struct {
+	id      string
+	backend Backend
 }
 
-func (s *sessions) Connect(server string) error {
-	redis, err := redis.NewRedisSession(&redis.RedisConf{Server: server})
-	if err != nil {
-		return err
+// CRDT owns the storage backends for independent counter actors. It is safe for
+// concurrent use and must not be copied. Call Close when finished.
+type CRDT struct {
+	replicas  []replica
+	prefix    string
+	closeOnce sync.Once
+	closeErr  error
+}
+
+// NewWithBackends constructs a client from initialized storage backends without
+// performing I/O. Backends may use different storage implementations. Their IDs
+// must be distinct and stable. On success the client owns and closes them; on
+// failure the caller retains ownership. The input slice is not retained.
+func NewWithBackends(backends []Backend, options ...Option) (*CRDT, error) {
+	if len(backends) == 0 {
+		return nil, ErrNoBackends
 	}
-	redis.SetPrefix(CRDTPrefix)
-	s.Add(redis)
-
-	return nil
-}
-
-func (s *sessions) Add(session *redis.RedisSession) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sessions = append(s.sessions, session)
-}
-
-// One returns a random connection
-func (s *sessions) One() *redis.RedisSession {
-	// s.mu.Lock()
-	// defer s.mu.Unlock()
-	return s.sessions[s.randomSource.Intn(len(s.sessions))]
-}
-
-// All returns all connections
-func (s *sessions) All() []*redis.RedisSession {
-	// s.mu.Lock()
-	// defer s.mu.Unlock()
-	return s.sessions
-}
-
-// Count returns backend service count
-func (s *sessions) Count() int {
-	// s.mu.Lock()
-	// defer s.mu.Unlock()
-	return len(s.sessions)
-}
-
-// New creates a new CRDT system and its backend connections
-func New(servers []string) (*CRDT, error) {
-	c := &CRDT{
-		sessions: &sessions{
-			randomSource: rand.New(
-				rand.NewSource(time.Now().UnixNano()),
-			),
-		},
+	c := &CRDT{prefix: CRDTPrefix}
+	for _, option := range options {
+		option(c)
 	}
-
-	// sync connections
-	var wg sync.WaitGroup
-
-	// TODO add lock for err
-	var err error
-
-	// try to connect to all servers
-	for _, s := range servers {
-		wg.Add(1)
-		go func(server string) {
-			defer wg.Done()
-			// return early if any of the previous connections returned err
-			if err != nil {
-				return
-			}
-
-			if errc := c.sessions.Connect(server); errc != nil {
-				err = errc
-				return
-			}
-		}(s)
+	seen := make(map[string]bool, len(backends))
+	for i, backend := range backends {
+		if nilBackend(backend) {
+			return nil, fmt.Errorf("%w: backend %d is nil", ErrInvalidBackend, i)
+		}
+		id := backend.ID()
+		if id == "" || seen[id] {
+			return nil, fmt.Errorf("%w: backend %d has an empty or duplicate actor ID", ErrInvalidBackend, i)
+		}
+		seen[id] = true
+		c.replicas = append(c.replicas, replica{id: id, backend: backend})
 	}
-	wg.Wait()
-
-	if err != nil {
-		return nil, err
-	}
-
 	return c, nil
 }
 
-// CRDT holds the required data for CCRDT systems
-type CRDT struct {
-	// main redis connections
-	sessions *sessions
+func nilBackend(backend Backend) bool {
+	if backend == nil {
+		return true
+	}
+	value := reflect.ValueOf(backend)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
+}
 
-	randomSource *rand.Rand
+// Close closes each owned backend exactly once, returning any close errors.
+// Subsequent calls return the same result. It is safe to call concurrently.
+func (c *CRDT) Close() error {
+	c.closeOnce.Do(func() {
+		errs := make([]error, len(c.replicas))
+		for i, replica := range c.replicas {
+			if err := replica.backend.Close(); err != nil {
+				errs[i] = fmt.Errorf("crdt: close backend %d: %w", i, err)
+			}
+		}
+		c.closeErr = errors.Join(errs...)
+	})
+	return c.closeErr
+}
+
+func (c *CRDT) counterKey(kind, key string) string {
+	return c.prefix + ":v2:" + kind + ":" + base64.RawURLEncoding.EncodeToString([]byte(key))
 }
