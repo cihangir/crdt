@@ -1,6 +1,6 @@
 # CRDT
 
-[![CI](https://github.com/cihangir/crdt/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/cihangir/crdt/actions/workflows/ci.yml)
+[![CI](https://github.com/cihangir/crdt/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/cihangir/crdt/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/cihangir/crdt.svg)](https://pkg.go.dev/github.com/cihangir/crdt)
 
 Conflict-free replicated data types for Go 1.27+. Replicas merge independent
@@ -21,7 +21,7 @@ The sets and register have usable zero values. Transport, periodic synchronizati
 and persistence of their snapshots are owned by the application.
 
 ```sh
-go get github.com/cihangir/crdt@main
+go get github.com/cihangir/crdt
 ```
 
 ## Counter backends
