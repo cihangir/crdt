@@ -188,8 +188,17 @@ func (b *RedisBackend) Close() error {
 	return b.closeErr
 }
 
-// Redis checks int64 overflow. Stored values never pass through Lua's floating
-// point numbers, which lose integer precision beyond 2^53.
+// incrementScript atomically validates an actor's stored component and increments
+// it. HINCRBY already provides an atomic increment and int64 overflow checking;
+// Lua bundles the additional nonnegative, canonical-integer validation and the
+// overflow precheck with that update. A plain HINCRBY could replace this script
+// if stored components were assumed to be valid.
+//
+// Stored counts and the overflow threshold stay as decimal strings. Converting
+// them to Lua numbers would lose integer precision above 2^53; HINCRBY performs
+// the actual arithmetic using Redis's signed 64-bit integer implementation.
+//
+// See https://redis.io/docs/latest/commands/hincrby/.
 var incrementScript = redis.NewScript(`
 local current = redis.call('HGET', KEYS[1], ARGV[1])
 if current and not ((current == '0' or string.match(current, '^[1-9][0-9]*$')) and
@@ -203,8 +212,27 @@ redis.call('HINCRBY', KEYS[1], ARGV[1], ARGV[2])
 return 1
 `)
 
-// Validate the entire destination before writing: Lua errors do not roll back
-// earlier writes. Compare decimal strings to preserve exact int64 values.
+// mergeScript atomically joins incoming and stored components by taking their
+// maximum on one Redis server. This prevents a stale repair from overwriting a
+// concurrent increment: a merge can read 5, another client increment it to 6,
+// and an ordinary HSET of the merge's stale 5 would lose that increment. The
+// script reads the current value and conditionally updates it without another
+// client's commands interleaving, preserving 6 in that example.
+//
+// A Go mutex cannot coordinate writers in different client processes. Redis
+// WATCH/MULTI/EXEC could instead protect a comparison performed in Go, at the
+// cost of additional network exchanges and retries when concurrent writes cause
+// transaction conflicts. Lua keeps this conditional update on the server.
+// Other backends provide the same atomic merge contract with their own storage
+// primitives; MemoryBackend uses a Go mutex. Synchronizing separate Redis servers
+// is still handled by Go and is not a single cross-server transaction.
+//
+// Validate the entire destination before writing because Lua errors do not roll
+// back earlier writes. Compare canonical decimal strings rather than Lua numbers
+// to preserve exact int64 values, including integers above 2^53.
+//
+// See https://redis.io/docs/latest/develop/programmability/eval-intro/ and
+// https://redis.io/docs/latest/develop/using-commands/transactions/.
 var mergeScript = redis.NewScript(`
 local function valid(s)
  return (s == '0' or string.match(s, '^[1-9][0-9]*$')) and
